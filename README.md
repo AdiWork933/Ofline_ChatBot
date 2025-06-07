@@ -39,7 +39,7 @@ This offline chatbot platform features:
 -   Powered by offline LLM (transformers)
 -   Feedback input (helpful / not helpful)
 
-![image](https://github.com/user-attachments/assets/f81b2fed-f030-4142-afb5-fff51e1bf353)
+![image](https://github.com/user-attachments/assets/59968a0d-ab83-407f-997a-b7b9acb52754)
 
 ### ⚙️ Backend Logic
 
