@@ -9,6 +9,7 @@ from base64 import b64encode
 
 nltk.download("punkt")
 
+
 # Set favicon and page title
 st.set_page_config(page_title="EDU GEN", page_icon="img/edugen.png", layout="wide")
 
@@ -20,7 +21,7 @@ def load_logo_base64(path):
     with open(path, "rb") as f:
         return b64encode(f.read()).decode()
 
-edugen_logo = load_logo_base64("img/edugen.png")  # Chatbot logo
+edugen_logo = load_logo_base64("img/bot_img.png")  # Chatbot logo
 user_logo = load_logo_base64("img/images.png")     # User logo
 
 # --- Custom chat bubble rendering
@@ -97,7 +98,7 @@ for key in ['chat_history', 'show_feedback']:
         st.session_state[key] = [] if key == 'chat_history' else False
 
 # --- Title
-# st.title("🤖 Chat with Document Assistant")
+st.title("🤖 Chat with Me")
 
 # --- Show chat history with logo bubbles
 for entry in st.session_state.chat_history:
@@ -182,5 +183,3 @@ if question:
         })
         st.session_state.show_feedback = False
 
-
-#streamlit run user_panel.py
