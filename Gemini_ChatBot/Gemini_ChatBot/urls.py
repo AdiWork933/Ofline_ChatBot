@@ -3,7 +3,7 @@ from .views import (
     hello, ask_question, admin_upload_file, reload,
     generate_token, delete_file, list_uploaded_files, get_uploaded_files,
     # New imports for Super Admin functionality
-    add_sub_admin, delete_sub_admin, list_sub_admins
+    add_sub_admin, delete_sub_admin,list_sub_admins,
 )
 urlpatterns = [
     # ── Chat / Q&A ───────────────────────────────────────────
@@ -36,6 +36,7 @@ urlpatterns = [
     path('admin/view/<str:status_folder>/', list_uploaded_files, name='view_folder_files'),
     path('admin/download/<str:folder_name>/', get_uploaded_files, name='download_multiple_files'),
     path('admin/download/<str:folder_name>/<str:file_name>/', get_uploaded_files, name='download_single_file'),
+
 ]
 
 

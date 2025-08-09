@@ -20,6 +20,7 @@ import torch
 import google.generativeai as genai
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, FileResponse, HttpResponse
+from collections import defaultdict
 from rest_framework.parsers import JSONParser
 import zipfile
 import io
@@ -30,6 +31,8 @@ import base64
 # Import pymongo for MongoDB interaction
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, DuplicateKeyError
+from bson.objectid import ObjectId  
+
 
 # Import Django's password hashers
 from django.contrib.auth.hashers import make_password, check_password
@@ -51,12 +54,21 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME")
 
+folder_list =  [
+        'dse', 'dsp', 'arch', 'bba', 'hmct', 'dhmct', 'dsewp', 'mba', 'mca',
+        'mpharm', 'march', 'mhmct', 'mbale', 'mcale', 'mbawp', 'mcawp',
+        'phd', 'sct', 'dtehmct', 'dsdwp']
+
+
 if not all([SUPER_ADMIN_USERNAME, SUPER_ADMIN_PASSWORD, SECRET_KEY, MONGO_URI, MONGO_DB_NAME]):
     raise ValueError("SUPER_ADMIN_USERNAME, SUPER_ADMIN_PASSWORD, SECRET_KEY, MONGO_URI, and MONGO_DB_NAME must be set in .env file")
 
 # Global MongoDB client and database objects
 _mongo_client = None
 _mongo_db = None
+
+# In-memory storage for chat history
+_chat_histories = defaultdict(list)
 
 def get_mongo_db():
     """
@@ -144,7 +156,7 @@ def stream_json_objects(filepath):
         else:
             yield data
 
-def get_all_file_text(folder="uploads_data", chunk_word_limit=5800):
+def get_all_file_text(folder="uploads_data", chunk_word_limit=8000):
     processed_files = []
     if not os.path.exists(folder):
         print(f"Warning: Directory '{folder}' not found.")
@@ -195,50 +207,88 @@ def get_all_file_text(folder="uploads_data", chunk_word_limit=5800):
             continue
     return processed_files
 
-def ask_gemini(context, question):
-    prompt = f"""
+def ask_gemini(context, question, chat_history=None):
+    """
+    Asks the Gemini model a question with a given context and optional chat history.
+    """
+    instructional_prompt = f"""
 You are an intelligent assistant analyzing the following context extracted from various educational documents (PDFs, Excel, etc.). Use this context to answer the user’s question accurately.
 
-### Instructions:
-- Do not copy large portions or paragraphs from the context.
-- Analyze and synthesize the information to form an informative response.
-- If the question is irrelevant to the context (e.g., context does not relate at all to the question), reply:
-    "I can't understand your question."
-- For admission, criteria, or requirements questions, assume they are referring to the Maharashtra Board (if not otherwise stated).
-- If the context contains Ai in JSON format, assume it means All India Rank (merit). Use it carefully to infer rank-related answers.
-- If information like FC (Final Cutoff), Rank, or Application ID is not available in the context, respond with:
-    "Sorry! Your application ID is out of list."
-- Do not mention any file names in the answer.
-- Assume:
-    - Total female rankers = 185
-    - Total male rankers = 88
-    - Total Home Universities = 10
-    - Total Other Universities = 9
-- If the question is about female candidates, return only female data.
-    If about male, return only **male data.
-- If the question is about home university, return only data for those.
-    If asking about other universities, return proper names if available(handle samll and capital word like MBA(mba,Mba,etc..).
+### Hard rules (must follow exactly):
+1. **Do not copy large portions or paragraphs from the context.** Summarize and synthesize.
+2. **If the question is irrelevant to the context** (i.e., the context does not relate at all to the question), reply exactly:
+   "I can't understand your question."
+3. **For admission, criteria, or requirements questions**, assume they refer to the **Maharashtra Board** unless the user explicitly states otherwise.
+4. **If the context contains "Ai" in JSON format**, treat it as **All India rank (merit)** and use it carefully to infer rank-related answers.
+5. **If information like FC (Final Cutoff), Rank, or Application ID is not available in the context**, respond exactly:
+   "Sorry! Your application ID is out of list."
+6. **If the user asks to link FC codes to candidate ranks but the context contains no mapping between FC codes and ranks**, respond exactly:
+   "I am sorry, I cannot fulfill this request. The provided data does not link FC codes to candidate ranks. The FC codes refer to facilitation centers, while the ranks refer to the merit ranking of candidates. There is no inherent relationship between the two in the given context."
+7. **When the user asks for totals (e.g., total FCs, total ranks listed), compute them from the provided context and answer concisely.**
+8. **Always assume `Total female rankers = 185`** when that value is needed or referenced.
+9. **Exact canned chat replies**: if user says:
+   - "whoe are ypu" (or variants asking who the assistant is) → reply exactly: "I'm your friendly assistant bot."
+   - "i love you" → reply exactly: "I can't understand your question."
+   - Greeting like "hallo how are you" → reply exactly: "I'm doing well, thank you for asking. How can I help you today?"
+10. **When the user asks for today's date or current time**, return the absolute date (not relative terms) in the user's timezone (**Asia/Kolkata**) and in the form `"Month Day, Year"` (e.g., "August 8, 2025"). If an error occurs during processing, you may reply:
+    "Sorry, I encountered an error while processing your request."
+11. **Do not mention any file names in the answer.**
+12. **Do not invent links between unconnected data** (for example, do not claim a candidate is associated with an FC code unless the context explicitly shows such a mapping).
+13. **When asked to present FC or rank data in list form,** produce clear, short lists (bulleted or numbered) using only the fields present in the context (e.g., FC code, FC name/location, coordinator, contact, rank, candidate name) and do not add extra fields.
+14. **If user asks factual questions that could have changed over time (e.g., recent admissions rules, cutoff updates),** clarify that the assistant must check up-to-date sources. (The system using this prompt will decide whether to browse.)
+15. **If the user attempts to get private or disallowed information** (sensitive personal data not present in the context), refuse and respond with "I can't understand your question."
 
-### Context:
-{context}
+### Behavior & interpretation rules:
+- Analyze and synthesize the context to form an informative, compact response.
+- Prefer concise answers; when a list is requested, use a clean list format.
+- If the user asks multiple related things in one message (e.g., "give me FC and rank in list form above"), attempt to fulfill each sub-request in order — but do not fabricate links. If one sub-request cannot be fulfilled due to missing mapping, return the exact refusal phrase from rule 6 and still return any other requested items you can (e.g., standalone FC details and standalone ranks).
+- When the context *does* include FC details (code, name, coordinator, phone, address), you may extract and present those details in list/tabular form.
+- When the context *does* include ranks and candidate names, you may extract and present those in list/tabular form.
+- If the user asks for counts or totals, compute them from the context and reply plainly (e.g., "There are X facilitation centers listed. The number of ranks listed is Y.").
 
----
+### Conversation edge-cases (handle like these examples):
+- Example: User: "give me details about FC1008 , FC6958."
+  - If those FC codes appear in context with details, return a short list for each FC with fields present (Location, Coordinator, Contact, Notes).
+- Example: User: "give me the candidate name with rank 272."
+  - If rank 272 exists in context with candidate name, return the candidate name only.
+- Example: User: "give me both fc and rank in list form above."
+  - If the context does **not** map FC codes to ranks, respond exactly with the refusal phrase from rule 6.
+  - Also provide standalone FC details and standalone rank details if requested and available.
+- Example: User: "total FC and Ranks details present ."
+  - Compute and return totals from context (e.g., "There are 27 facilitation centers... The number of ranks listed is 272.").
 
-### Question:
-{question}
+### Output style:
+- Use plain language, friendly but professional tone.
+- For factual outputs use short lists or 1–3 short paragraphs.
+- For errors or irrelevant questions use the exact canned responses specified above.
 
----
+### Additional assumptions:
+- Timezone: Asia/Kolkata. When returning dates/times, use this timezone and absolute dates.
+- Admission-related queries default to Maharashtra Board unless user states otherwise.
+- Total female rankers = 185.
 
-### Answer:
+Context: {context}
 """
+
+
+    # Start building the full prompt for the model
+    full_prompt = [instructional_prompt]
+
+    # Add chat history if it exists
+    if chat_history:
+        full_prompt.extend(chat_history)
+
+    # Add the current question
+    full_prompt.append(f"User: {question}")
+    full_prompt.append("Assistant:") # Prompt the model for its response
+
     try:
-        model = genai.GenerativeModel("models/gemini-2.0-flash")
-        response = model.generate_content(prompt)
+        model = genai.GenerativeModel(model_name="gemini-2.0-flash")
+        response = model.generate_content(full_prompt)
         return response.text.strip()
     except Exception as e:
         print(f"Error calling Gemini API: {e}")
-        raise Exception("Failed to get a response from the AI model.")
-
+        return "Sorry, I encountered an error while processing your request."
 #models/gemini-2.5-flash
 def is_small_talk(text: str):
     predefined = {
@@ -342,6 +392,7 @@ def is_small_talk(text: str):
         "can you do magic": "Only digital ones and zeros magic!",
         "how many users do you have": "A lot! And I value every one!",
         "what makes you unique": "My job is helping you — that's special!",
+        "ok":"Okay. Is there anything else I can help you with?",
     }
 
 
@@ -456,6 +507,7 @@ def hello(request):
 
 @csrf_exempt
 @api_view(['POST'])
+# @require_token
 def ask_question(request, status_folder=None):
     """
     Answers a question by finding relevant context from loaded documents
@@ -493,11 +545,21 @@ def ask_question(request, status_folder=None):
 
     context = "\n\n".join([folder_chunks[idx] for idx in top_results[1]])
 
-    print("Sending relevant context to Gemini API...")
+    # Use session key or IP as identifier for in-memory storage
+    session_key = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', 'default'))
+    chat_history = _chat_histories.get(session_key, [])
+
+    print("Sending relevant context and history to Gemini API...")
     try:
-        answer_text = ask_gemini(context, question)
+        answer_text = ask_gemini(context, question, chat_history)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # Save the new interaction to the in-memory history
+    chat_history.append(f"User: {question}")
+    chat_history.append(f"Assistant: {answer_text}")
+    # Keep the history to the last 5 interactions (10 items: 5 Q&A pairs)
+    _chat_histories[session_key] = chat_history[-10:]
 
     answer_html = f"<div>{answer_text.replace(chr(10), '<br>')}</div>"
 
@@ -589,11 +651,7 @@ def admin_upload_file(request, status_folder=None):
     """
     Allows authenticated admins to upload files to specific allowed folders.
     """
-    allowed_folders = [
-        'dse', 'dsp', 'arch', 'bba', 'hmct', 'dhmct', 'dsewp', 'mba', 'mca',
-        'mpharm', 'march', 'mhmct', 'mbale', 'mcale', 'mbawp', 'mcawp',
-        'phd', 'sct', 'dtehmct', 'dsdwp'
-    ]
+    allowed_folders = folder_list
 
     folder_name = status_folder if status_folder else "default"
 
@@ -640,11 +698,7 @@ def delete_file(request, status_folder, filename=None):
     """
     Allows authenticated admins to delete single or multiple files from allowed folders.
     """
-    allowed_folders = [
-        'dse', 'dsp', 'arch', 'bba', 'hmct', 'dhmct', 'dsewp', 'mba', 'mca',
-        'mpharm', 'march', 'mhmct', 'mbale', 'mcale', 'mbawp', 'mcawp',
-        'phd', 'sct', 'dtehmct', 'dsdwp'
-    ]
+    allowed_folders = files_list
 
     if status_folder not in allowed_folders:
         return Response({
@@ -859,8 +913,6 @@ def add_sub_admin(request):
 #------------------------------------------------------delete_sub_admin-------------------------------------------------------------
 
 
-from bson.objectid import ObjectId  # Required to work with MongoDB ObjectId
-
 @csrf_exempt
 @api_view(['DELETE'])
 @require_token  # Ensures token is present and decoded
@@ -937,3 +989,4 @@ def list_sub_admins(request):
         return Response({"error": f"Database connection error: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     except Exception as e:
         return Response({"error": f"An error occurred: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
