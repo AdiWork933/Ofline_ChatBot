@@ -99,7 +99,7 @@ UPLOAD_DIR = "uploads_data" # Define UPLOAD_DIR globally as it's used in multipl
 def format_text(text):
     return re.sub(r'\s+', ' ', text).strip()
 
-def chunk_text_by_sentence(text, chunk_word_limit=250):
+def chunk_text_by_sentence(text, chunk_word_limit=512):
     sentences = nltk.sent_tokenize(text)
     chunks = []
     current_chunk = ""
@@ -209,86 +209,67 @@ def get_all_file_text(folder="uploads_data", chunk_word_limit=8000):
 
 def ask_gemini(context, question, chat_history=None):
     """
-    Asks the Gemini model a question with a given context and optional chat history.
+    Uses the Gemini model to process the given context and question
+    according to the specified rules. 
+    If Gemini fails or gives a "Sorry..." response,
+    it retries with a simpler fallback prompt assuming Maharashtra Board.
     """
     instructional_prompt = f"""
-You are an intelligent assistant analyzing the following context extracted from various educational documents (PDFs, Excel, etc.). Use this context to answer the user’s question accurately.
-
-### Hard rules (must follow exactly):
-1. **Do not copy large portions or paragraphs from the context.** Summarize and synthesize.
-2. **If the question is irrelevant to the context** (i.e., the context does not relate at all to the question), reply exactly:
-   "I can't understand your question."
-3. **For admission, criteria, or requirements questions**, assume they refer to the **Maharashtra Board** unless the user explicitly states otherwise.
-4. **If the context contains "Ai" in JSON format**, treat it as **All India rank (merit)** and use it carefully to infer rank-related answers.
-5. **If information like FC (Final Cutoff), Rank, or Application ID is not available in the context**, respond exactly:
-   "Sorry! Your application ID is out of list."
-6. **If the user asks to link FC codes to candidate ranks but the context contains no mapping between FC codes and ranks**, respond exactly:
-   "I am sorry, I cannot fulfill this request. The provided data does not link FC codes to candidate ranks. The FC codes refer to facilitation centers, while the ranks refer to the merit ranking of candidates. There is no inherent relationship between the two in the given context."
-7. **When the user asks for totals (e.g., total FCs, total ranks listed), compute them from the provided context and answer concisely.**
-8. **Always assume `Total female rankers = 185`** when that value is needed or referenced.
-9. **Exact canned chat replies**: if user says:
-   - "whoe are ypu" (or variants asking who the assistant is) → reply exactly: "I'm your friendly assistant bot."
-   - "i love you" → reply exactly: "I can't understand your question."
-   - Greeting like "hallo how are you" → reply exactly: "I'm doing well, thank you for asking. How can I help you today?"
-10. **When the user asks for today's date or current time**, return the absolute date (not relative terms) in the user's timezone (**Asia/Kolkata**) and in the form `"Month Day, Year"` (e.g., "August 8, 2025"). If an error occurs during processing, you may reply:
-    "Sorry, I encountered an error while processing your request."
-11. **Do not mention any file names in the answer.**
-12. **Do not invent links between unconnected data** (for example, do not claim a candidate is associated with an FC code unless the context explicitly shows such a mapping).
-13. **When asked to present FC or rank data in list form,** produce clear, short lists (bulleted or numbered) using only the fields present in the context (e.g., FC code, FC name/location, coordinator, contact, rank, candidate name) and do not add extra fields.
-14. **If user asks factual questions that could have changed over time (e.g., recent admissions rules, cutoff updates),** clarify that the assistant must check up-to-date sources. (The system using this prompt will decide whether to browse.)
-15. **If the user attempts to get private or disallowed information** (sensitive personal data not present in the context), refuse and respond with "I can't understand your question."
-
-### Behavior & interpretation rules:
-- Analyze and synthesize the context to form an informative, compact response.
-- Prefer concise answers; when a list is requested, use a clean list format.
-- If the user asks multiple related things in one message (e.g., "give me FC and rank in list form above"), attempt to fulfill each sub-request in order — but do not fabricate links. If one sub-request cannot be fulfilled due to missing mapping, return the exact refusal phrase from rule 6 and still return any other requested items you can (e.g., standalone FC details and standalone ranks).
-- When the context *does* include FC details (code, name, coordinator, phone, address), you may extract and present those details in list/tabular form.
-- When the context *does* include ranks and candidate names, you may extract and present those in list/tabular form.
-- If the user asks for counts or totals, compute them from the context and reply plainly (e.g., "There are X facilitation centers listed. The number of ranks listed is Y.").
-
-### Conversation edge-cases (handle like these examples):
-- Example: User: "give me details about FC1008 , FC6958."
-  - If those FC codes appear in context with details, return a short list for each FC with fields present (Location, Coordinator, Contact, Notes).
-- Example: User: "give me the candidate name with rank 272."
-  - If rank 272 exists in context with candidate name, return the candidate name only.
-- Example: User: "give me both fc and rank in list form above."
-  - If the context does **not** map FC codes to ranks, respond exactly with the refusal phrase from rule 6.
-  - Also provide standalone FC details and standalone rank details if requested and available.
-- Example: User: "total FC and Ranks details present ."
-  - Compute and return totals from context (e.g., "There are 27 facilitation centers... The number of ranks listed is 272.").
+You are a helpful study assistant analyzing the following context extracted from various educational documents (PDFs, Excel, etc.). 
+Use this context to answer the user's question accurately and in a way that is easy for students to understand.also you'r a helpfull guid of student
+to help and understand the topic in simple way.
+### Output formatting rules:
+- Always respond in **Markdown syntax**.
+- Use `**bold**` for emphasis.
+- Use `_italic_` for key terms.
+- Use `` `inline code` `` for short code or IDs.
+- Use fenced code blocks (```python ... ``` or ```text ... ```) for multi-line code or tabular data.
+- Use bullet lists (`- item`) or numbered lists (`1. item`) where applicable.
+- Keep style clean and readable for students.
 
 ### Output style:
-- Use plain language, friendly but professional tone.
-- For factual outputs use short lists or 1–3 short paragraphs.
+- Use plain, clear study-style explanations that a student can easily understand.
+- For factual outputs use short lists or 1 to 3 short paragraphs.
 - For errors or irrelevant questions use the exact canned responses specified above.
-
-### Additional assumptions:
-- Timezone: Asia/Kolkata. When returning dates/times, use this timezone and absolute dates.
-- Admission-related queries default to Maharashtra Board unless user states otherwise.
-- Total female rankers = 185.
-
 Context: {context}
 """
 
-
-    # Start building the full prompt for the model
+    # Build the full prompt for Gemini
     full_prompt = [instructional_prompt]
 
-    # Add chat history if it exists
     if chat_history:
         full_prompt.extend(chat_history)
 
-    # Add the current question
     full_prompt.append(f"User: {question}")
-    full_prompt.append("Assistant:") # Prompt the model for its response
+    full_prompt.append("Assistant:")
 
     try:
         model = genai.GenerativeModel(model_name="gemini-2.0-flash")
         response = model.generate_content(full_prompt)
-        return response.text.strip()
+
+        # Get the text safely
+        answer = response.text.strip() if response and response.text else ""
+
+        # --- Condition for fallback ---
+        if not answer or answer == "I can't understand your question.":
+            fallback_prompt = f"""
+            - also you'r a helpfull guid of student
+to help and understand the topic in simple way.
+- Use **Markdown formatting** for the response (bold, italic, lists, code if relevant).
+
+Question: {question}
+"""
+            fallback_response = model.generate_content([fallback_prompt])
+            return fallback_response.text.strip() if fallback_response else "Sorry, I could not find an answer."
+
+        return answer
+
     except Exception as e:
         print(f"Error calling Gemini API: {e}")
         return "Sorry, I encountered an error while processing your request."
+
+
+
 #models/gemini-2.5-flash
 def is_small_talk(text: str):
     predefined = {
@@ -333,7 +314,6 @@ def is_small_talk(text: str):
         "how's the weather": "Check a weather app — I might not be up-to-date!",
         "do you know siri": "We bots all know each other ",
         "do you know alexa": "Sure! She's pretty popular.",
-        "what is ai": "AI stands for Artificial Intelligence, like me!",
         "sing a song": "I would, but I don’t have vocal cords!",
         "can you dance": "Only if you count data shuffling ",
         "who made you": "I was created by smart developers!",
@@ -393,6 +373,7 @@ def is_small_talk(text: str):
         "how many users do you have": "A lot! And I value every one!",
         "what makes you unique": "My job is helping you — that's special!",
         "ok":"Okay. Is there anything else I can help you with?",
+        "#@3!921!@#":"I am an AI built by the ChatBot .",
     }
 
 
@@ -698,7 +679,7 @@ def delete_file(request, status_folder, filename=None):
     """
     Allows authenticated admins to delete single or multiple files from allowed folders.
     """
-    allowed_folders = files_list
+    allowed_folders = folder_list
 
     if status_folder not in allowed_folders:
         return Response({
