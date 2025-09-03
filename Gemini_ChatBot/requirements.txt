@@ -1,0 +1,17 @@
+﻿python-dotenv
+nltk
+fuzzywuzzy
+python-Levenshtein 
+PyPDF2
+python-docx
+Django>=3.2
+djangorestframework
+PyJWT
+pymongo
+dnspython 
+bson
+sentence-transformers
+torch
+google-generativeai
+django-cors-headers
+pandas
