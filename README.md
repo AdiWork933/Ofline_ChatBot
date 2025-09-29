@@ -16,39 +16,62 @@ This project is a Gemini-integrated intelligent chatbot built using Django REST 
 
 ### 🚀 Getting Started
 #### 1. Clone the Repository
-git clone https://github.com/yourusername/gemini-chatbot-backend.git<br>
-cd gemini-chatbot-backend
+```
+  git clone https://github.com/AdiWork933/Ofline_ChatBot.git
+  cd gemini-chatbot-backend
+```
 #### 2. Create Virtual Environment
-python -m venv env<br>
-source env/bin/activate
-##### On Windows: env\Scripts\activate
+```
+  python -m venv .venv
+  source .venv/bin/activate (For Linux)
+  .venv/Scripts/activate (For window)
+```
+if activation error occur(window) then 
+```
+  Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+  .venv/Scripts/activate
+```
+
 #### 3. Install Dependencies
-pip install -r requirements.txt<br>
+```
+  pip install -r requirements.txt
+```
+#### 4. Environment Variables
+Create a .env file in the root directory with the following:
+```
+GOOGLE_API_KEY = your_gemini_api_key_here<br>
+SUPER_ADMIN_USERNAME = admin123
+SUPER_ADMIN_PASSWORD = sceret@123
+MONGODB_URI = your_mongodb_connection_uri
+DJANGO_SECRET_KEY = your_django_secret_key
+MONGO_DB_NAME = mongo db name
+```
+#### 5. Run Server
+```
+  python manage.py runserver
+```
+for any specific port 
+```
+  python manage.py runserver (port number like 8505)
+```
+#### API will be live(normal) at: http://127.0.0.1:8000/
 ### If google.api_core error appears, install:
 
 pip install google-generativeai<br>
 ## 🔑 Environment Variables
 Create a .env file in the root directory with the following:
+```
+GOOGLE_API_KEY = your_gemini_api_key_here<br>
+SUPER_ADMIN_USERNAME = admin123
+SUPER_ADMIN_PASSWORD = sceret@123
+MONGODB_URI = your_mongodb_connection_uri
+DJANGO_SECRET_KEY = your_django_secret_key
+MONGO_DB_NAME = mongo db name
+```
 
-env<br>
-GOOGLE_API_KEY=your_gemini_api_key_here<br>
-MONGODB_URI=your_mongodb_connection_uri<br>
-DJANGO_SECRET_KEY=your_django_secret_key<br>
-DEBUG=True
-### ⚙️ Run the Server
-python manage.py makemigrations<br>
-python manage.py migrate<br>
-python manage.py runserver<br>
-#### API will be live at: http://127.0.0.1:8000/
 
 ## 🧪 API Endpoints
-Method	Endpoint	Description<br>
-POST	/api/register/	Register new user<br>
-POST	/api/login/	Login and get JWT token<br>
-POST	/api/upload/	Upload supported documents<br>
-POST	/api/chat/	Ask a question (contextual)<br>
-GET	/api/history/	Get user’s past chat history
-
+Updat...........very soon.<br>
 Authentication is via JWT. Pass token in the header:
 
 Authorization: Bearer <your_token>
