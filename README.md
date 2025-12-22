@@ -74,3 +74,6 @@ This offline chatbot platform features:
 -   `Starting streamlit Server(Terminal 2)` : streamlit run user_panel.py
 -   `To stope streamlit Server` : ctrl + c (for both terminal)
 -   `To Deactivate virtual environment` : deactivate ( into terminal)
+
+
+updating
