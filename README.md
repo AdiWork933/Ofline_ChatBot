@@ -75,5 +75,3 @@ This offline chatbot platform features:
 -   `To stope streamlit Server` : ctrl + c (for both terminal)
 -   `To Deactivate virtual environment` : deactivate ( into terminal)
 
-
-Updating 
