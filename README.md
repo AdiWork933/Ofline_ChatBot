@@ -1,4 +1,4 @@
-# 🧠 Offline_ChatBoat
+# 🧠 Offline_ChatBoat (Under Update)
 
 An **offline AI-powered chatbot application** built using **Django**. This chatbot allows admins to upload knowledge base documents (PDF, DOCX, XLSX), and users to chat in a ChatGPT-style interface with file-based knowledge using local LLMs like `flan-t5-large` or quantized `Mistral/TinyLLaMA`.
 
