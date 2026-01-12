@@ -1,6 +1,8 @@
-# 🧠 Offline_ChatBoat (Under Update)
+# 🤖 Offline AI Chatbot using Fine-Tuned Qwen 2.5 3B (Django) - under update
 
-An **offline AI-powered chatbot application** built using **Django**. This chatbot allows admins to upload knowledge base documents (PDF, DOCX, XLSX), and users to chat in a ChatGPT-style interface with file-based knowledge using local LLMs like `flan-t5-large` or quantized `Mistral/TinyLLaMA`.
+An **offline AI-powered chatbot application** built using **Django** and powered by a **fine-tuned Qwen 2.5 3B large language model**.
+
+This system allows administrators to upload knowledge base documents (PDF, DOCX, XLSX), which are automatically processed and indexed. Users can chat with the bot in a **ChatGPT-style interface** and receive intelligent, context-aware answers — all running completely **offline with zero cloud dependency**.
 
 ---
 
