@@ -29,11 +29,6 @@ This offline chatbot platform features:
 -   Manage users (optional)
     -login page of admin pannel
 
-![image](https://github.com/user-attachments/assets/3e614cda-1253-4361-ae0e-e76e6f4ed9f0)
-
--Admin File Upload Dashboard
-
-![image](https://github.com/user-attachments/assets/f4ed7137-88fc-4b7e-8828-2e96b9945bd2)
 
 ### 🧑‍💻 User Panel
 
